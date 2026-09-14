@@ -641,6 +641,21 @@
   function recomputeDerived() {
     const entries = (state.entries || []).filter((e) => !e.skip);
 
+    // Ontime gives every entry a `dayOffset` (0, 1, 2, ...) whenever an
+    // unlinked entry's own anchored clock time lands earlier-in-day than
+    // where the preceding chain of durations arrived — e.g. a "Walk out —
+    // Break" cue pinned to a specific real time. It's how Ontime keeps the
+    // absolute schedule monotonically increasing; the live offset it reports
+    // is calculated against that day-adjusted schedule too. Skipping this
+    // adjustment makes every event after the first such break look like it
+    // ended a full day ago the instant that break goes live — which is
+    // exactly what produced the false "Show complete" from cue 18 onward.
+    // Normalize every timestamp here, once, so nothing downstream has to
+    // remember to do it.
+    const dayMs = (e) => (typeof e.dayOffset === 'number' ? e.dayOffset : 0) * 86_400_000;
+    const normStart = (e) => (typeof e.timeStart === 'number' ? e.timeStart + dayMs(e) : e.timeStart);
+    const normEnd = (e) => (typeof e.timeEnd === 'number' ? e.timeEnd + dayMs(e) : e.timeEnd);
+
     const clusterMap = new Map(); // name -> { clusters, lastPos }
     entries.forEach((e, pos) => {
       const names = parseSpeakers(e.custom && e.custom.Speakers);
@@ -650,10 +665,11 @@
         if (rec.lastPos === pos - 1 && rec.clusters.length) {
           const c = rec.clusters[rec.clusters.length - 1];
           if (typeof e.timeEnd === 'number') {
-            c.end = (typeof c.end === 'number') ? Math.max(c.end, e.timeEnd) : e.timeEnd;
+            const end = normEnd(e);
+            c.end = (typeof c.end === 'number') ? Math.max(c.end, end) : end;
           }
         } else {
-          rec.clusters.push({ start: e.timeStart, end: e.timeEnd, title: e.title });
+          rec.clusters.push({ start: normStart(e), end: normEnd(e), title: e.title });
         }
         rec.lastPos = pos;
       });
@@ -676,7 +692,7 @@
       const lines = typeof raw === 'string' && raw.trim()
         ? raw.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
         : [];
-      stageItems.push({ id: e.id, time: e.timeStart, endTime: e.timeEnd, lines, title: e.title });
+      stageItems.push({ id: e.id, time: normStart(e), endTime: normEnd(e), lines, title: e.title });
     });
     stageItems.sort((a, b) => a.time - b.time);
     state.stageItems = stageItems;
@@ -926,6 +942,7 @@
           title: entry.title || '',
           timeStart: typeof entry.timeStart === 'number' ? entry.timeStart : null,
           timeEnd: typeof entry.timeEnd === 'number' ? entry.timeEnd : null,
+          dayOffset: typeof entry.dayOffset === 'number' ? entry.dayOffset : 0,
           skip: !!entry.skip,
           custom: entry.custom && typeof entry.custom === 'object' ? entry.custom : {},
         });
