@@ -804,7 +804,6 @@
       $speakersCount.textContent = '';
       return;
     }
-    $speakersCount.textContent = rows.length + (rows.length === 1 ? ' presenter' : ' presenters');
 
     // Compute projected status per cluster, and find the single soonest
     // upcoming (not-yet-started) cluster across everyone for the "Up next" tag.
@@ -827,7 +826,23 @@
       return { name: row.name, clusters };
     });
 
-    const html = computedRows.map((row) => {
+    // Presenters whose every cluster has wrapped drop off the list, the
+    // same way finished cues fall off the stage panel — once someone's
+    // last chip goes "past", there's nothing left for the ASM to track for
+    // them. (Skipped while nowMs is null/stale, same as the stage panel, so
+    // a dropped connection never falsely clears someone off the list.)
+    const activeRows = nowMs === null
+      ? computedRows
+      : computedRows.filter((row) => row.clusters.some((c) => c.status !== 'past'));
+
+    if (!activeRows.length) {
+      $speakersList.innerHTML = '<div class="panel-empty">All presenters have wrapped</div>';
+      $speakersCount.textContent = '';
+      return;
+    }
+    $speakersCount.textContent = activeRows.length + (activeRows.length === 1 ? ' presenter' : ' presenters');
+
+    const html = activeRows.map((row) => {
       const onStage = row.clusters.some((c) => c.status === 'now');
       const isUpNext = !onStage && soonestCluster && row.clusters.includes(soonestCluster);
       const tag = onStage ? '<span class="tag onstage">On stage</span>' : (isUpNext ? '<span class="tag upnext">Up next</span>' : '');
