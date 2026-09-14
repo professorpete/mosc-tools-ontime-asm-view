@@ -594,12 +594,22 @@
     connected: false,
     clock: null,                 // server wall clock, ms since midnight
     clockReceivedAt: 0,          // performance.now() when clock last arrived
+    lastMsgAt: 0,                 // performance.now() when ANY ws message last arrived — watchdog uses this
     offset: null,                // { absolute, relative, mode, expectedRundownEnd }
     eventNow: null,
     entries: null,               // flattened rundown [{ id, title, timeStart, timeEnd, skip, custom }]
     speakerRows: null,           // derived: [{ name, clusters:[{start,end,title}] }]
     stageItems: null,            // derived: [{ id, time, lines, title }]
   };
+
+  // A dead WS connection doesn't always fire onclose/onerror — some proxies
+  // and venue networks drop the push channel silently while the socket
+  // object still reports OPEN. If no message of any kind has arrived in
+  // STALE_MS, we treat the feed as stale: renderStage/renderSpeakers stop
+  // trusting the (still climbing) interpolated clock so they can't drift
+  // into a false "Show complete", and the watchdog force-closes the socket
+  // so the existing auto-reconnect logic kicks in and re-syncs everything.
+  const STALE_MS = 8000;
 
   /* "VOG" (voice of god) is a booth announcer, not a person who physically
    * walks to the stage — excluded from the presenter list on purpose. */
@@ -717,12 +727,24 @@
 
   /* ---------- Render ---------- */
   function render() {
-    const nowMs = currentClockMs();
-    const offMs = currentOffsetMs();
+    // If no message has arrived in STALE_MS, the interpolated clock is just
+    // extrapolating forward on its own and can no longer be trusted against
+    // the (also frozen) offset — that combination is what previously made
+    // the stage list drain to empty and announce "Show complete" mid-show.
+    // Passing nowMs=null instead makes renderStage/renderSpeakers fall back
+    // to showing everything as not-yet-passed, which is the safe failure mode.
+    const isStale = state.connected && state.lastMsgAt && (performance.now() - state.lastMsgAt) > STALE_MS;
+    const nowMs = isStale ? null : currentClockMs();
+    const offMs = isStale ? 0 : currentOffsetMs();
+
+    if (isStale) {
+      setStatus('Reconnecting\u2026', '');
+      showHint();
+    }
 
     /* Now strip */
     const off = state.offset;
-    if (off && typeof off.absolute === 'number' && state.eventNow) {
+    if (!isStale && off && typeof off.absolute === 'number' && state.eventNow) {
       const mode = off.mode === 'relative' ? 'relative' : 'absolute';
       const m = mode === 'relative' ? off.relative : off.absolute;
       if (Math.abs(m) < 15_000) {
@@ -870,6 +892,9 @@
   function handleMessage(raw) {
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
+    // Any message at all — known tag or not — proves the push channel is
+    // still alive, so the staleness watchdog resets here, not just below.
+    state.lastMsgAt = performance.now();
     if (msg.tag === 'runtime-data' || msg.tag === 'poll') {
       applyStore(msg.payload);
       return;
@@ -975,6 +1000,7 @@
       clearTimeout(openTimeout);
       retryDelay = 500;
       state.connected = true;
+      state.lastMsgAt = performance.now();
       setStatus('Live', 'connected');
       $hint.style.display = 'none';
       ws.send(JSON.stringify({ tag: 'poll' }));
@@ -999,6 +1025,19 @@
     setTimeout(connect, retryDelay);
     retryDelay = Math.min(retryDelay * 2, 5000);
   }
+
+  // Watchdog: some venue networks/proxies kill a WebSocket's push traffic
+  // without ever firing onclose/onerror, so the socket sits there reporting
+  // OPEN forever while no more data arrives. Every few seconds, check how
+  // long it's actually been since the last message and force a reconnect
+  // if it's gone quiet — the render()-side staleness guard keeps the UI
+  // honest in the meantime.
+  setInterval(() => {
+    if (!state.connected || !state.lastMsgAt) return;
+    if (performance.now() - state.lastMsgAt > STALE_MS && activeWs) {
+      try { activeWs.close(); } catch { /* onclose below will still fire scheduleReconnect via close() */ }
+    }
+  }, 3000);
 
   function showHint() {
     $hint.textContent = "Reconnecting to the live feed — this page will update automatically once it's back.";
