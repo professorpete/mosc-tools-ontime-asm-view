@@ -46,26 +46,60 @@
     min-height: 0;
   }
 
-  /* ---------- Now strip (schedule offset) — the headline readout at the
-   * very top of the page, since ahead/behind pace is the first thing an
-   * ASM needs to see at a glance. ---------- */
+  /* ---------- Now strip (show title + schedule offset) — the headline row at
+   * the very top of the page: the presentation title on the left, ahead/behind
+   * pace on the right, both same size. Uses the same grid columns as #panels
+   * below so the row's left/right edges line up with the Who's Up column's
+   * left/right edges regardless of viewport size. ---------- */
   #nowStrip {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 1.6vw;
+    max-width: 1200px;
+    width: 100%;
+    margin: 0 auto;
+  }
+  #nowStripRow {
+    grid-column: 1;
     display: flex;
-    justify-content: center;
-    text-align: center;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1em;
+    min-width: 0;
+  }
+  #sessionName {
+    text-align: left;
+    font-size: clamp(14px, 2.8vh, 26px);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    color: var(--dim-strong);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  #nowStripOffset {
+    text-align: right;
     font-size: clamp(14px, 2.8vh, 26px);
     font-weight: 700;
     letter-spacing: 0.01em;
     color: var(--dim);
+    flex: none;
   }
   #nowStripOffset.good { color: var(--good); }
   #nowStripOffset.warn { color: var(--warn); }
   #nowStripOffset.danger { color: var(--danger); }
+  @media (max-width: 800px) {
+    #nowStrip { grid-template-columns: 1fr; }
+    #nowStripRow { flex-direction: column; align-items: center; gap: 0.3em; }
+    #sessionName { text-align: center; white-space: normal; max-width: 96vw; }
+    #nowStripOffset { text-align: center; }
+  }
 
-  /* ---------- Footer meta (show name, connection status, show link) ----------
+  /* ---------- Footer meta (connection status, show link) ----------
    * Secondary/reference info, so it lives at the bottom in a compact strip
-   * above the mosc-tools brand row rather than competing with the offset
-   * readout at the top. */
+   * above the mosc-tools brand row rather than competing with the title +
+   * offset readout at the top. */
   #footerMeta {
     display: flex;
     flex-wrap: wrap;
@@ -74,14 +108,6 @@
     gap: 0.6em;
     width: 100%;
     text-align: center;
-  }
-
-  #sessionName {
-    font-size: clamp(12px, 1.5vh, 15px);
-    font-weight: 700;
-    color: var(--dim-strong);
-    max-width: 96vw;
-    overflow-wrap: break-word;
   }
 
   #status {
@@ -488,7 +514,10 @@
   <div id="app">
   <main>
   <div id="nowStrip">
-    <span id="nowStripOffset">—</span>
+    <div id="nowStripRow">
+      <div id="sessionName">Connecting…</div>
+      <span id="nowStripOffset">—</span>
+    </div>
   </div>
 
   <div id="hint"></div>
@@ -523,7 +552,6 @@
 
   <footer>
     <div id="footerMeta">
-      <div id="sessionName">Connecting…</div>
       <div id="status" title="Click to change the Ontime link">
         <span class="dot"></span><span id="statusText">Connecting</span>
         <input id="serverInput" spellcheck="false" autocomplete="off" autocapitalize="none" autocorrect="off" placeholder="cloud.getontime.no/xxxxxxxx or 192.168.1.50:4001" />
