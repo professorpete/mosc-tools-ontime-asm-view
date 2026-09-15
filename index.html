@@ -816,8 +816,16 @@
     }
 
     // Compute projected status per cluster, and find the single soonest
-    // upcoming (not-yet-started) cluster across everyone for the "Up next" tag.
-    let soonestCluster = null;
+    // upcoming (not-yet-started) start time across everyone for the "Up
+    // next" tag. Track it as a plain timestamp rather than a cluster
+    // object: two co-presenters going up together produce two separate
+    // cluster objects with the same pStart (one per presenter's own
+    // `clusters` array), and comparing by object identity later would only
+    // ever match whichever single object happened to win this loop —
+    // leaving their castmate untagged even though they're equally "up
+    // next". Comparing by the timestamp value instead lets every row that
+    // shares the soonest start time match.
+    let soonestPStart = null;
     const computedRows = rows.map((row) => {
       const clusters = row.clusters.map((c) => {
         const pStart = c.start + offMs;
@@ -828,8 +836,8 @@
           else if (nowMs >= pStart) status = 'now';
         }
         const withStatus = { ...c, pStart, pEnd, status };
-        if (status === 'future' && (!soonestCluster || pStart < soonestCluster.pStart)) {
-          soonestCluster = withStatus;
+        if (status === 'future' && (soonestPStart === null || pStart < soonestPStart)) {
+          soonestPStart = pStart;
         }
         return withStatus;
       });
@@ -854,10 +862,10 @@
 
     const html = activeRows.map((row) => {
       const onStage = row.clusters.some((c) => c.status === 'now');
-      const isUpNext = !onStage && soonestCluster && row.clusters.includes(soonestCluster);
+      const isUpNext = !onStage && soonestPStart !== null && row.clusters.some((c) => c.status === 'future' && c.pStart === soonestPStart);
       const tag = onStage ? '<span class="tag onstage">On stage</span>' : (isUpNext ? '<span class="tag upnext">Up next</span>' : '');
       const chips = row.clusters.map((c) => {
-        const cls = c.status === 'now' ? 'status-now' : (c.status === 'past' ? 'status-past' : (c === soonestCluster ? 'status-soon' : ''));
+        const cls = c.status === 'now' ? 'status-now' : (c.status === 'past' ? 'status-past' : (c.status === 'future' && c.pStart === soonestPStart ? 'status-soon' : ''));
         const label = c.status === 'now' ? 'Now' : formatClock(c.pStart);
         const title = c.title ? ` title="${escapeHtml(c.title)}"` : '';
         return `<span class="chip ${cls}"${title}>${label}</span>`;
