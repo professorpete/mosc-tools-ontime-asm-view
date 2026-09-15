@@ -679,7 +679,7 @@
             c.end = (typeof c.end === 'number') ? Math.max(c.end, end) : end;
           }
         } else {
-          rec.clusters.push({ start: normStart(e), end: normEnd(e), title: e.title });
+          rec.clusters.push({ start: normStart(e), end: normEnd(e), title: e.title, startEntryId: e.id });
         }
         rec.lastPos = pos;
       });
@@ -706,6 +706,34 @@
     });
     stageItems.sort((a, b) => a.time - b.time);
     state.stageItems = stageItems;
+  }
+
+  // Ontime only slides a cue's time with the live ahead/behind offset when
+  // that cue is chained to the one before it (`linkStart: true`). A cue
+  // pinned to an absolute clock time (e.g. "Doors open", a scheduled break)
+  // keeps its own planned time no matter how far ahead or behind the show
+  // is running — Ontime won't slide it. So the live offset should only
+  // apply to the run of linked cues between "now" and the next such
+  // not-yet-reached anchor; that anchor, and everything chained after it,
+  // should show their plain projected time until the show actually gets
+  // there. This walks the rundown in cue order (matching recomputeDerived's
+  // own `entries` filter/order) and returns a Map of entry id -> whether
+  // the live offset should apply to that entry. Entries at or before the
+  // currently active cue always stay eligible (offset legitimately reflects
+  // how the cue that's actually playing right now is tracking against its
+  // own plan) — only cues strictly after it can trigger the reset.
+  function computeOffsetEligibility() {
+    const entries = (state.entries || []).filter((e) => !e.skip);
+    const nowId = state.eventNow && state.eventNow.id;
+    const nowIndex = nowId != null ? entries.findIndex((e) => e.id === nowId) : -1;
+    const map = new Map();
+    let active = true;
+    entries.forEach((e, idx) => {
+      const notYetReached = nowIndex !== -1 && idx > nowIndex;
+      if (active && notYetReached && e.linkStart === false) active = false;
+      map.set(e.id, active);
+    });
+    return map;
   }
 
   /* ---------- Formatting helpers ---------- */
@@ -788,8 +816,9 @@
       $nowStripOffset.className = '';
     }
 
-    renderSpeakers(nowMs, offMs);
-    renderStage(nowMs, offMs);
+    const offsetEligible = computeOffsetEligibility();
+    renderSpeakers(nowMs, offMs, offsetEligible);
+    renderStage(nowMs, offMs, offsetEligible);
 
     requestAnimationFrame(scheduleNextRender);
   }
@@ -802,7 +831,7 @@
     else requestAnimationFrame(scheduleNextRender);
   }
 
-  function renderSpeakers(nowMs, offMs) {
+  function renderSpeakers(nowMs, offMs, offsetEligible) {
     const rows = state.speakerRows;
     if (!rows) {
       $speakersList.innerHTML = '<div class="panel-empty">Waiting for show data…</div>';
@@ -828,8 +857,10 @@
     let soonestPStart = null;
     const computedRows = rows.map((row) => {
       const clusters = row.clusters.map((c) => {
-        const pStart = c.start + offMs;
-        const pEnd = (typeof c.end === 'number' ? c.end : c.start) + offMs;
+        const eligible = !offsetEligible || offsetEligible.get(c.startEntryId) !== false;
+        const effOff = eligible ? offMs : 0;
+        const pStart = c.start + effOff;
+        const pEnd = (typeof c.end === 'number' ? c.end : c.start) + effOff;
         let status = 'future';
         if (nowMs !== null) {
           if (nowMs >= pEnd) status = 'past';
@@ -878,7 +909,7 @@
     $speakersList.innerHTML = html;
   }
 
-  function renderStage(nowMs, offMs) {
+  function renderStage(nowMs, offMs, offsetEligible) {
     const items = state.stageItems;
     if (!items) {
       $stageList.innerHTML = '<div class="panel-empty">Waiting for show data…</div>';
@@ -897,8 +928,10 @@
     let soonMarked = false;
     const rows = [];
     items.forEach((item) => {
-      const pStart = item.time + offMs;
-      const pEnd = (typeof item.endTime === 'number' ? item.endTime : item.time) + offMs;
+      const eligible = !offsetEligible || offsetEligible.get(item.id) !== false;
+      const effOff = eligible ? offMs : 0;
+      const pStart = item.time + effOff;
+      const pEnd = (typeof item.endTime === 'number' ? item.endTime : item.time) + effOff;
       if (nowMs !== null && nowMs >= pEnd) return;
       let cls = '';
       if (nowMs !== null && nowMs >= pStart) cls = 'status-now';
@@ -977,6 +1010,7 @@
           timeEnd: typeof entry.timeEnd === 'number' ? entry.timeEnd : null,
           dayOffset: typeof entry.dayOffset === 'number' ? entry.dayOffset : 0,
           skip: !!entry.skip,
+          linkStart: entry.linkStart !== false, // absolute-start cues (breaks, pinned calls) report false
           custom: entry.custom && typeof entry.custom === 'object' ? entry.custom : {},
         });
       }
