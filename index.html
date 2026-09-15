@@ -191,7 +191,7 @@
     align-items: center;
     gap: 0.55em;
     min-width: 0;
-    flex: 1 1 auto;
+    flex: 0 0 auto;
   }
   .sname {
     font-weight: 700;
@@ -217,7 +217,17 @@
     gap: 0.45em;
     flex-wrap: wrap;
     justify-content: flex-end;
-    flex: none;
+    /* A presenter with many appearances needs many chips. `flex: none`
+       (flex-shrink: 0) refused to give this box less than its full
+       one-line content width, so once a row's chips got wide enough,
+       they'd overflow past the row's edge and visually collide with the
+       row below instead of wrapping. Letting it shrink to whatever
+       space remains after the name means it's actually narrower than
+       its content when there are many chips, which is what makes the
+       flex-wrap above kick in and roll extra chips onto a new line
+       inside this row instead of spilling into the next one. */
+    flex: 1 1 auto;
+    min-width: 0;
   }
   .chip {
     font-variant-numeric: tabular-nums;
