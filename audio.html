@@ -56,13 +56,14 @@
     margin: 0 auto;
   }
   #nowStripRow {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
     align-items: baseline;
-    justify-content: space-between;
     gap: 1em;
     min-width: 0;
   }
   #sessionName {
+    justify-self: start;
     text-align: left;
     font-size: clamp(14px, 2.8vh, 26px);
     font-weight: 700;
@@ -73,7 +74,12 @@
     white-space: nowrap;
     min-width: 0;
   }
+  #nowStripRow #status {
+    justify-self: center;
+    margin: 0;
+  }
   #nowStripOffset {
+    justify-self: end;
     text-align: right;
     font-size: clamp(14px, 2.8vh, 26px);
     font-weight: 700;
@@ -85,9 +91,9 @@
   #nowStripOffset.warn { color: var(--warn); }
   #nowStripOffset.danger { color: var(--danger); }
   @media (max-width: 800px) {
-    #nowStripRow { flex-direction: column; align-items: center; gap: 0.3em; }
-    #sessionName { text-align: center; white-space: normal; max-width: 96vw; }
-    #nowStripOffset { text-align: center; }
+    #nowStripRow { grid-template-columns: 1fr; justify-items: center; gap: 0.3em; }
+    #sessionName { justify-self: center; text-align: center; white-space: normal; max-width: 96vw; }
+    #nowStripOffset { justify-self: center; text-align: center; }
   }
 
   /* ---------- Footer meta (connection status, show link) ----------
@@ -108,12 +114,13 @@
     display: inline-flex;
     align-items: center;
     gap: 0.6em;
-    font-size: clamp(10px, 1.2vh, 12px);
+    font-size: clamp(11px, 1.6vh, 14px);
+    font-weight: 700;
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--dim);
     cursor: pointer;
-    padding: 0.3em 0.8em;
+    padding: 0.4em 1em;
     border-radius: 999px;
     background: var(--panel-solid);
     border: 1px solid var(--border);
@@ -466,6 +473,10 @@
   <div id="nowStrip">
     <div id="nowStripRow">
       <div id="sessionName">Connecting…</div>
+      <div id="status" title="Click to change the Ontime link">
+        <span class="dot"></span><span id="statusText">Connecting</span>
+        <input id="serverInput" spellcheck="false" autocomplete="off" autocapitalize="none" autocorrect="off" placeholder="cloud.getontime.no/xxxxxxxx or 192.168.1.50:4001" />
+      </div>
       <span id="nowStripOffset">—</span>
     </div>
   </div>
@@ -490,10 +501,6 @@
 
   <footer>
     <div id="footerMeta">
-      <div id="status" title="Click to change the Ontime link">
-        <span class="dot"></span><span id="statusText">Connecting</span>
-        <input id="serverInput" spellcheck="false" autocomplete="off" autocapitalize="none" autocorrect="off" placeholder="cloud.getontime.no/xxxxxxxx or 192.168.1.50:4001" />
-      </div>
       <div id="linkPill" title="Click to change the Ontime link">
         <span id="linkPillText">—</span>
         <input id="linkPillInput" spellcheck="false" autocomplete="off" autocapitalize="none" autocorrect="off" placeholder="cloud.getontime.no/xxxxxxxx or 192.168.1.50:4001" />
