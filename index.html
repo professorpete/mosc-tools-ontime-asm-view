@@ -1011,20 +1011,27 @@
       return;
     }
 
-    // Events that have already finished drop off the list as the show
-    // progresses, so only the current + upcoming events remain visible —
-    // the current one always ends up at the top, highlighted in green.
-    let soonMarked = false;
+    // Events drop off the list once Ontime's own eventNow has moved past
+    // them — the current one always ends up at the top, highlighted in
+    // green. This tracks eventNow rather than wall-clock time: a cue
+    // running long or short doesn't auto-advance the highlight on its own,
+    // it only moves when the operator actually advances the show in
+    // Ontime. eventNow is only absent before the show has ever been
+    // loaded/started; in that case nothing is "now" yet and only the first
+    // row is marked "up next".
+    const nowId = state.eventNow && state.eventNow.id;
+    const nowIndex = nowId != null ? items.findIndex((it) => it.id === nowId) : -1;
+
     const rows = [];
-    items.forEach((item) => {
+    items.forEach((item, idx) => {
       const eligible = !offsetEligible || offsetEligible.get(item.id) !== false;
       const effOff = eligible ? offMs : 0;
       const pStart = item.time + effOff;
-      const pEnd = (typeof item.endTime === 'number' ? item.endTime : item.time) + effOff;
-      if (nowMs !== null && nowMs >= pEnd) return;
+      if (nowIndex !== -1 && idx < nowIndex) return;
       let cls = '';
-      if (nowMs !== null && nowMs >= pStart) cls = 'status-now';
-      else if (!soonMarked) { cls = 'status-soon'; soonMarked = true; }
+      if (nowIndex !== -1 && idx === nowIndex) cls = 'status-now';
+      else if (nowIndex !== -1 && idx === nowIndex + 1) cls = 'status-soon';
+      else if (nowIndex === -1 && idx === 0) cls = 'status-soon';
       const linesHtml = item.lines.map((l) => `<div class="stext-line">${escapeHtml(l)}</div>`).join('');
       rows.push(`<div class="strow ${cls}">
         <div class="stime">${formatClock(pStart)}</div>

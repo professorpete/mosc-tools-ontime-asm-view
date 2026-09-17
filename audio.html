@@ -830,11 +830,20 @@
   }
 
   // Single renderer for all three columns, one grid row per cue. A cue
-  // drops off the table entirely once it's finished (same behavior as the
-  // old stage panel) — the current cue is highlighted green, the next
-  // upcoming one amber, both bands spanning the full row across all three
+  // drops off the table once Ontime's own eventNow has moved past it — the
+  // currently *loaded/running* cue is highlighted green, the next one in
+  // rundown order amber, both bands spanning the full row across all three
   // cells so the highlight lines up with the show-flow, who's-up, and audio
   // content for that same cue.
+  //
+  // This deliberately does NOT use wall-clock time to decide what's
+  // "current" or to drop rows: a cue running long (or short) shouldn't make
+  // the highlight silently jump to the next item on its own. It only moves
+  // when Ontime reports a new eventNow — i.e. when the operator actually
+  // advances the show. Until then the same cue stays "now" even after its
+  // planned end time passes. eventNow is only absent before the show has
+  // ever been loaded/started; in that case nothing is "now" yet and only
+  // the first row is marked "up next".
   function renderTable(nowMs, offMs, offsetEligible) {
     const items = state.rows;
     if (!items) {
@@ -848,17 +857,22 @@
       return;
     }
 
-    let soonMarked = false;
+    const nowId = state.eventNow && state.eventNow.id;
+    const nowIndex = nowId != null ? items.findIndex((it) => it.id === nowId) : -1;
+
     const rows = [];
-    items.forEach((item) => {
+    items.forEach((item, idx) => {
       const eligible = !offsetEligible || offsetEligible.get(item.id) !== false;
       const effOff = eligible ? offMs : 0;
       const pStart = item.time + effOff;
-      const pEnd = (typeof item.endTime === 'number' ? item.endTime : item.time) + effOff;
-      if (nowMs !== null && nowMs >= pEnd) return;
+      // Cues before the operator-advanced current cue have been passed;
+      // everything from the current cue onward stays visible regardless of
+      // wall-clock time.
+      if (nowIndex !== -1 && idx < nowIndex) return;
       let cls = '';
-      if (nowMs !== null && nowMs >= pStart) cls = 'row-now';
-      else if (!soonMarked) { cls = 'row-soon'; soonMarked = true; }
+      if (nowIndex !== -1 && idx === nowIndex) cls = 'row-now';
+      else if (nowIndex !== -1 && idx === nowIndex + 1) cls = 'row-soon';
+      else if (nowIndex === -1 && idx === 0) cls = 'row-soon';
 
       const stageLinesHtml = item.stageLines.map((l) => `<div class="stext-line">${escapeHtml(l)}</div>`).join('');
       const audioLinesHtml = item.audioLines.map((l) => `<div class="field-line">${escapeHtml(l)}</div>`).join('');
