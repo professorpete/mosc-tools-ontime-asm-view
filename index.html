@@ -767,8 +767,12 @@
             const end = normEnd(e);
             c.end = (typeof c.end === 'number') ? Math.max(c.end, end) : end;
           }
+          // posEnd tracks the last entry (by position in `entries`) that's
+          // part of this run, so live status can be judged against Ontime's
+          // actual eventNow position instead of projected clock time.
+          c.posEnd = pos;
         } else {
-          rec.clusters.push({ start: normStart(e), end: normEnd(e), title: e.title, startEntryId: e.id });
+          rec.clusters.push({ start: normStart(e), end: normEnd(e), title: e.title, startEntryId: e.id, posStart: pos, posEnd: pos });
         }
         rec.lastPos = pos;
       });
@@ -933,17 +937,27 @@
       return;
     }
 
-    // Compute projected status per cluster, and find the single soonest
-    // upcoming (not-yet-started) start time across everyone for the "Up
-    // next" tag. Track it as a plain timestamp rather than a cluster
-    // object: two co-presenters going up together produce two separate
-    // cluster objects with the same pStart (one per presenter's own
-    // `clusters` array), and comparing by object identity later would only
-    // ever match whichever single object happened to win this loop —
-    // leaving their castmate untagged even though they're equally "up
-    // next". Comparing by the timestamp value instead lets every row that
-    // shares the soonest start time match.
-    let soonestPStart = null;
+    // Status is judged against Ontime's own eventNow position — not
+    // wall-clock time — so a cluster stays "on stage" / "up next" until the
+    // operator actually advances the show, the same rule the stage panel
+    // uses. nowPos is eventNow's position in the same (non-skipped) entry
+    // order recomputeDerived used to build the clusters; -1 means the show
+    // hasn't been loaded/started yet, in which case nothing is "now" and
+    // only the soonest cluster is "up next".
+    const entries = (state.entries || []).filter((e) => !e.skip);
+    const nowId = state.eventNow && state.eventNow.id;
+    const nowPos = nowId != null ? entries.findIndex((e) => e.id === nowId) : -1;
+
+    // Find the single soonest upcoming (not-yet-reached) cluster position
+    // across everyone for the "Up next" tag. Track it as a plain position
+    // rather than a cluster object: two co-presenters going up together
+    // produce two separate cluster objects with the same posStart (one per
+    // presenter's own `clusters` array), and comparing by object identity
+    // later would only ever match whichever single object happened to win
+    // this loop — leaving their castmate untagged even though they're
+    // equally "up next". Comparing by position instead lets every row that
+    // shares the soonest position match.
+    let soonestFuturePos = null;
     const computedRows = rows.map((row) => {
       const clusters = row.clusters.map((c) => {
         const eligible = !offsetEligible || offsetEligible.get(c.startEntryId) !== false;
@@ -951,13 +965,13 @@
         const pStart = c.start + effOff;
         const pEnd = (typeof c.end === 'number' ? c.end : c.start) + effOff;
         let status = 'future';
-        if (nowMs !== null) {
-          if (nowMs >= pEnd) status = 'past';
-          else if (nowMs >= pStart) status = 'now';
+        if (nowPos !== -1) {
+          if (c.posEnd < nowPos) status = 'past';
+          else if (c.posStart <= nowPos) status = 'now';
         }
         const withStatus = { ...c, pStart, pEnd, status };
-        if (status === 'future' && (soonestPStart === null || pStart < soonestPStart)) {
-          soonestPStart = pStart;
+        if (status === 'future' && (soonestFuturePos === null || c.posStart < soonestFuturePos)) {
+          soonestFuturePos = c.posStart;
         }
         return withStatus;
       });
@@ -967,9 +981,10 @@
     // Presenters whose every cluster has wrapped drop off the list, the
     // same way finished cues fall off the stage panel — once someone's
     // last chip goes "past", there's nothing left for the ASM to track for
-    // them. (Skipped while nowMs is null/stale, same as the stage panel, so
-    // a dropped connection never falsely clears someone off the list.)
-    const activeRows = nowMs === null
+    // them. (Skipped while eventNow is unknown, same as the stage panel, so
+    // a dropped connection or a not-yet-started show never falsely clears
+    // someone off the list.)
+    const activeRows = nowPos === -1
       ? computedRows
       : computedRows.filter((row) => row.clusters.some((c) => c.status !== 'past'));
 
@@ -982,10 +997,10 @@
 
     const html = activeRows.map((row) => {
       const onStage = row.clusters.some((c) => c.status === 'now');
-      const isUpNext = !onStage && soonestPStart !== null && row.clusters.some((c) => c.status === 'future' && c.pStart === soonestPStart);
+      const isUpNext = !onStage && soonestFuturePos !== null && row.clusters.some((c) => c.status === 'future' && c.posStart === soonestFuturePos);
       const tag = onStage ? '<span class="tag onstage">On stage</span>' : (isUpNext ? '<span class="tag upnext">Up next</span>' : '');
       const chips = row.clusters.map((c) => {
-        const cls = c.status === 'now' ? 'status-now' : (c.status === 'past' ? 'status-past' : (c.status === 'future' && c.pStart === soonestPStart ? 'status-soon' : ''));
+        const cls = c.status === 'now' ? 'status-now' : (c.status === 'past' ? 'status-past' : (c.status === 'future' && c.posStart === soonestFuturePos ? 'status-soon' : ''));
         const label = c.status === 'now' ? 'Now' : formatClock(c.pStart);
         const title = c.title ? ` title="${escapeHtml(c.title)}"` : '';
         return `<span class="chip ${cls}"${title}>${label}</span>`;
