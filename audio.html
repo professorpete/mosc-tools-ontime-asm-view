@@ -167,7 +167,7 @@
 
   .table-header {
     display: grid;
-    grid-template-columns: 1fr 1.6fr;
+    grid-template-columns: 1.6fr 1fr;
     border-bottom: 1px solid var(--border);
     flex: none;
   }
@@ -194,7 +194,7 @@
 
   .table-body {
     display: grid;
-    grid-template-columns: 1fr 1.6fr;
+    grid-template-columns: 1.6fr 1fr;
     overflow-y: auto;
     min-height: 0;
     flex: 1;
@@ -214,9 +214,9 @@
     border-bottom: 1px solid var(--border);
     min-width: 0;
   }
-  .stage-cell { border-left: 1px solid var(--border); }
+  .audio-cell { border-left: 1px solid var(--border); }
   .row.row-soon .cell, .row.row-now .cell { position: relative; }
-  .row.row-soon .cell.audio-cell::before, .row.row-now .cell.audio-cell::before {
+  .row.row-soon .cell.stage-cell::before, .row.row-now .cell.stage-cell::before {
     content: '';
     position: absolute;
     left: 0;
@@ -227,7 +227,7 @@
     background: var(--warn);
   }
   .row.row-now .cell { background: rgba(53, 218, 140, 0.1); }
-  .row.row-now .cell.audio-cell::before { background: var(--good); }
+  .row.row-now .cell.stage-cell::before { background: var(--good); }
 
   .stime {
     font-variant-numeric: tabular-nums;
@@ -266,8 +266,8 @@
     .th-cell + .th-cell { display: none; }
     .row { display: flex; flex-direction: column; }
     .cell { border-left: none; }
-    .cell.audio-cell { border-bottom: none; }
-    .row.row-soon .cell.audio-cell::before, .row.row-now .cell.audio-cell::before { display: none; }
+    .cell.stage-cell { border-bottom: none; }
+    .row.row-soon .cell.stage-cell::before, .row.row-now .cell.stage-cell::before { display: none; }
     .cell-label { display: block; }
     .cell:empty { display: none; }
   }
@@ -485,8 +485,8 @@
 
   <section id="panels">
     <div class="table-header">
-      <div class="th-cell">Audio</div>
       <div class="th-cell">Show Flow - Stage View <span class="th-sub" id="stageCount"></span></div>
+      <div class="th-cell">Audio</div>
     </div>
     <div class="table-body" id="showGrid">
       <div class="panel-empty">Waiting for show data…</div>
@@ -865,7 +865,6 @@
       const audioLabel = audioLinesHtml ? '<span class="cell-label">Audio</span>' : '';
 
       rows.push(`<div class="row ${cls}">
-        <div class="cell audio-cell">${audioLabel}${audioLinesHtml}</div>
         <div class="cell stage-cell">
           <div class="stime">${formatClock(pStart)}</div>
           <div class="stext-col">
@@ -873,6 +872,7 @@
             ${stageLinesHtml}
           </div>
         </div>
+        <div class="cell audio-cell">${audioLabel}${audioLinesHtml}</div>
       </div>`);
     });
 
